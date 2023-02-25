@@ -1,6 +1,7 @@
 package validator
 
 import (
+	"errors"
 	"fmt"
 	"reflect"
 )
@@ -20,7 +21,7 @@ var validators = []validatorElem{
 }
 
 type validator struct {
-	errors Errors
+	err error
 }
 
 func Validate[T any](strct *T) error {
@@ -68,7 +69,8 @@ func (v *validator) validateStruct(baseFieldPath string, strct any) error {
 			resolved = resolved.Elem()
 		}
 		if resolved.Kind() == reflect.Struct {
-			v.validateStruct(
+			// ignore err, its already in v.err
+			_ = v.validateStruct(
 				fmt.Sprintf("%s%s.", baseFieldPath, fieldT.Name),
 				resolved.Addr().Interface(),
 			)
@@ -86,7 +88,7 @@ func (v *validator) validateStruct(baseFieldPath string, strct any) error {
 				continue
 			}
 			if err := elem.validator.validate(val, fieldV); err != nil {
-				v.errors = append(v.errors, fmt.Errorf("%s%s: %s", baseFieldPath, fieldT.Name, err.Error()))
+				v.err = errors.Join(v.err, fmt.Errorf("%s%s: %s", baseFieldPath, fieldT.Name, err.Error()))
 			}
 		}
 		// validate default tags
@@ -96,13 +98,13 @@ func (v *validator) validateStruct(baseFieldPath string, strct any) error {
 				continue
 			}
 			if err := elem.validator.validate(val, fieldV); err != nil {
-				v.errors = append(v.errors, fmt.Errorf("%s%s: %s", baseFieldPath, fieldT.Name, err.Error()))
+				v.err = errors.Join(v.err, fmt.Errorf("%s%s: %s", baseFieldPath, fieldT.Name, err.Error()))
 			}
 		}
 	}
 
-	if len(v.errors) > 0 {
-		return v.errors
+	if v.err != nil {
+		return v.err
 	}
 	return nil
 }
